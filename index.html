@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Kantina Queue — Pre-Order System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ TOP BAR ============ -->
+<header class="topbar">
+  <div class="topbar__brand">
+    <span class="topbar__ticket">🎫</span>
+    <div class="topbar__name">
+      <strong>Kantina Queue</strong>
+      <small>San Jose Elementary Canteen</small>
+    </div>
+  </div>
+
+  <nav class="topbar__nav">
+    <button class="navbtn is-active" data-view="student" id="navStudent">Order Food</button>
+    <button class="navbtn" data-view="tracker" id="navTracker">My Orders</button>
+    <button class="navbtn navbtn--staff" data-view="admin" id="navAdmin">Staff Panel</button>
+  </nav>
+
+  <button class="cartFab" id="cartFab" aria-label="Open cart">
+    🛒 <span class="cartFab__count" id="cartCount">0</span>
+  </button>
+</header>
+
+<!-- ============ STUDENT ORDER VIEW ============ -->
+<main class="view" id="view-student">
+
+  <section class="hero">
+    <div class="hero__ticket">
+      <div class="hero__stub">
+        <span class="hero__eyebrow">TAKE A NUMBER, SKIP THE LINE</span>
+        <h1>Order now.<br>Pick up at the bell.</h1>
+        <p>Reserve your recess or lunch order ahead of time — pay with cash on pickup or GCash, then grab your food the moment it's ready.</p>
+      </div>
+      <div class="hero__perf" aria-hidden="true"></div>
+      <div class="hero__ticketnum">
+        <small>NEXT QUEUE NUMBER</small>
+        <strong id="heroTicketNum">K-0001</strong>
+      </div>
+    </div>
+  </section>
+
+  <section class="catbar" id="catbar" aria-label="Menu categories"></section>
+
+  <section class="menu" id="menuGrid"></section>
+</main>
+
+<!-- ============ ORDER TRACKER VIEW ============ -->
+<main class="view" id="view-tracker" hidden>
+  <div class="panelHead">
+    <h2>My Orders</h2>
+    <p>Orders placed this visit show automatically. Reopening the site later? Search by name or ticket number.</p>
+  </div>
+
+  <div class="trackerSearch">
+    <input type="text" id="trackerSearchInput" placeholder="Search by ticket # (e.g. K-0007) or your name…">
+    <button class="btn btn--red" id="trackerSearchBtn">Search</button>
+  </div>
+
+  <div class="trackerList" id="trackerList"></div>
+</main>
+
+<!-- ============ ADMIN VIEW ============ -->
+<main class="view" id="view-admin" hidden>
+
+  <div class="adminLogin" id="adminLogin">
+    <div class="adminLogin__card">
+      <span class="adminLogin__icon">🔒</span>
+      <h2>Staff Sign-In</h2>
+      <p>Canteen staff only. Enter the staff passcode to view and manage today's orders.</p>
+      <input type="password" id="adminPass" placeholder="Staff passcode" inputmode="numeric">
+      <button class="btn btn--red" id="adminLoginBtn">Sign In</button>
+      <small class="adminLogin__hint">Demo passcode: <code>canteen2026</code></small>
+      <p class="adminLogin__error" id="adminError" hidden>Incorrect passcode. Try again.</p>
+    </div>
+  </div>
+
+  <div class="adminDash" id="adminDash" hidden>
+    <div class="panelHead panelHead--row">
+      <div>
+        <h2>Order Queue</h2>
+        <p id="adminDate"></p>
+      </div>
+      <button class="btn btn--ghost" id="adminLogoutBtn">Sign Out</button>
+    </div>
+
+    <div class="statRow" id="statRow"></div>
+
+    <div class="adminControls">
+      <div class="statusTabs" id="statusTabs"></div>
+      <input type="search" id="adminSearch" placeholder="Search ticket # or name…">
+    </div>
+
+    <div class="orderList" id="orderList"></div>
+  </div>
+</main>
+
+<!-- ============ CART DRAWER ============ -->
+<div class="overlay" id="overlay"></div>
+<aside class="drawer" id="cartDrawer" aria-label="Your cart">
+  <div class="drawer__head">
+    <h2>Your Order</h2>
+    <button class="drawer__close" id="closeCart" aria-label="Close cart">✕</button>
+  </div>
+
+  <div class="drawer__body" id="cartBody">
+    <div class="cartItems" id="cartItems"></div>
+    <p class="cartEmpty" id="cartEmpty">Your tray is empty. Add something tasty from the menu!</p>
+  </div>
+
+  <div class="drawer__foot" id="cartFoot">
+    <div class="totalRow">
+      <span>Total</span>
+      <strong id="cartTotal">₱0.00</strong>
+    </div>
+    <button class="btn btn--red btn--block" id="checkoutBtn" disabled>Proceed to Checkout</button>
+  </div>
+</aside>
+
+<!-- ============ CHECKOUT MODAL ============ -->
+<div class="modalOverlay" id="checkoutOverlay">
+  <div class="modal" id="checkoutModal">
+    <div class="modal__head">
+      <h2>Checkout</h2>
+      <button class="drawer__close" id="closeCheckout" aria-label="Close">✕</button>
+    </div>
+
+    <form id="checkoutForm" class="modal__body">
+      <label class="field">
+        <span>Student name</span>
+        <input type="text" id="studentName" required placeholder="Juan Dela Cruz">
+      </label>
+
+      <label class="field">
+        <span>Grade &amp; Section</span>
+        <input type="text" id="studentSection" required placeholder="Grade 6 - Sampaguita">
+      </label>
+
+      <label class="field">
+        <span>Pickup time</span>
+        <select id="pickupTime" required>
+          <option value="">Select a pickup slot…</option>
+          <option>Recess — 9:30 AM to 9:50 AM</option>
+          <option>Lunch — 12:00 PM to 12:40 PM</option>
+          <option>Recess — 2:30 PM to 2:50 PM</option>
+        </select>
+      </label>
+
+      <fieldset class="field">
+        <legend>Payment method</legend>
+        <div class="payOptions">
+          <label class="payOpt">
+            <input type="radio" name="payment" value="cash" checked>
+            <span class="payOpt__icon">💵</span>
+            <span class="payOpt__text">
+              <strong>Cash on Pickup</strong>
+              <small>Pay at the canteen counter</small>
+            </span>
+          </label>
+          <label class="payOpt">
+            <input type="radio" name="payment" value="gcash">
+            <span class="payOpt__icon">📱</span>
+            <span class="payOpt__text">
+              <strong>GCash</strong>
+              <small>Pay online before pickup</small>
+            </span>
+          </label>
+        </div>
+      </fieldset>
+
+      <div class="gcashBox" id="gcashBox" hidden>
+        <p>Send the exact amount to:</p>
+        <div class="gcashNum">0917 123 4567 <span>(J. Dela Cruz — Canteen)</span></div>
+        <label class="field">
+          <span>GCash reference number</span>
+          <input type="text" id="gcashRef" placeholder="e.g. 1234567890123">
+        </label>
+        <p class="gcashNote">Your order will be marked <strong>Payment Pending</strong> until staff verifies your reference number.</p>
+      </div>
+
+      <div class="modal__summary" id="modalSummary"></div>
+
+      <button type="submit" class="btn btn--red btn--block">Place Order</button>
+    </form>
+  </div>
+</div>
+
+<!-- ============ CONFIRMATION MODAL ============ -->
+<div class="modalOverlay" id="confirmOverlay">
+  <div class="modal modal--ticket" id="confirmModal">
+    <div class="ticketCard">
+      <div class="ticketCard__top">
+        <small>YOUR QUEUE NUMBER</small>
+        <h1 id="confirmNumber">K-0001</h1>
+      </div>
+      <div class="hero__perf" aria-hidden="true"></div>
+      <div class="ticketCard__bottom" id="confirmDetails"></div>
+      <button class="btn btn--red btn--block" id="confirmDoneBtn">Done</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="script.js"></script>
+</body>
+</html>
