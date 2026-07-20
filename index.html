@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>Kantina Queue — Pre-Order System</title>
+<title>Pre-Order System</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
@@ -15,8 +15,7 @@
   <div class="topbar__brand">
     <span class="topbar__ticket">🎫</span>
     <div class="topbar__name">
-      <strong>Kantina Queue</strong>
-      <small>San Jose Elementary Canteen</small>
+      <strong>BA Canteen</strong>
     </div>
   </div>
 
@@ -77,9 +76,9 @@
       <span class="adminLogin__icon">🔒</span>
       <h2>Staff Sign-In</h2>
       <p>Canteen staff only. Enter the staff passcode to view and manage today's orders.</p>
-      <input type="password" id="adminPass" placeholder="Staff passcode">
+      <input type="password" id="adminPass" placeholder="Staff Passcode">
       <button class="btn btn--red" id="adminLoginBtn">Sign In</button>
-      <small class="adminLogin__hint">Demo passcode: <code>canteen2026</code></small>
+      <small class="adminLogin__hint">Passcode: <code>canteen2026</code></small>
       <p class="adminLogin__error" id="adminError" hidden>Incorrect passcode. Try again.</p>
     </div>
   </div>
@@ -179,12 +178,12 @@
 
       <div class="gcashBox" id="gcashBox" hidden>
         <p>Send the exact amount to:</p>
-        <div class="gcashNum">0917 123 4567 <span>(J. Dela Cruz — Canteen)</span></div>
+        <div class="gcashNum">0932 267 7600 <span>(F. Pre — Canteen)</span></div>
         <label class="field">
-          <span>GCash reference number</span>
-          <input type="text" id="gcashRef" placeholder="e.g. 1234567890123">
+          <span>Your GCash Number</span>
+          <input type="text" id="gcashRef" placeholder="e.g. 09123456789">
         </label>
-        <p class="gcashNote">Your order will be marked <strong>Payment Pending</strong> until staff verifies your reference number.</p>
+        <p class="gcashNote">Your order will be marked <strong>Payment Pending</strong> until staff verifies your number.</p>
       </div>
 
       <div class="modal__summary" id="modalSummary"></div>
