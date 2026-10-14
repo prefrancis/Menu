@@ -1,7 +1,7 @@
 /* =========================================================
-   KANTINA QUEUE — School Canteen Pre-Order System
-   Backed by Supabase. Run schema.sql in your Supabase project
-   first, then fill in the two values below.
+   SUGAR CRUSH MILK TEA — Pre-Order System
+   Backed by Supabase. Same `orders` table as the original
+   system (no schema changes needed) — see notes in section 8.
 ========================================================= */
 
 /* ---------------------------------------------------------
@@ -15,47 +15,112 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ---------------------------------------------------------
-   1. EDIT YOUR MENU HERE
+   1. SHOP SETTINGS — EDIT HERE
 --------------------------------------------------------- */
-const MENU = [
-  { id: "m1", category: "Rice Meals", name: "Chicken Adobo with Rice", price: 55, emoji: "🍗", desc: "Classic soy-vinegar braised chicken, steamed rice." },
-  { id: "m2", category: "Rice Meals", name: "Beef Sinigang with Rice", price: 60, emoji: "🍲", desc: "Tamarind sour soup with beef and vegetables." },
-  { id: "m3", category: "Rice Meals", name: "Sweet & Sour Pork", price: 55, emoji: "🍖", desc: "Crispy pork in tangy sweet-sour sauce, with rice." },
-  { id: "m4", category: "Rice Meals", name: "Vegetable Fried Rice", price: 40, emoji: "🍛", desc: "Fried rice with mixed veggies and egg." },
+const MAX_QTY_PER_ITEM = 100;   // max cups per menu item, per order (all sizes/variants combined)
 
-  { id: "s1", category: "Snacks", name: "Cheese Siopao", price: 25, emoji: "🥟", desc: "Steamed bun with cheesy filling." },
-  { id: "s2", category: "Snacks", name: "Banana Cue", price: 15, emoji: "🍌", desc: "Caramelized fried saba banana on a stick." },
-  { id: "s3", category: "Snacks", name: "Cheese Sandwich", price: 20, emoji: "🥪", desc: "Toasted sandwich, cheese and egg spread." },
-  { id: "s4", category: "Snacks", name: "Turon", price: 15, emoji: "🍠", desc: "Crispy banana-jackfruit spring roll." },
+const ADMIN_PASSCODE = "sugarcrush2026"; // demo only — replace with real auth for production
 
-  { id: "d1", category: "Drinks", name: "Buko Juice", price: 20, emoji: "🥥", desc: "Fresh coconut juice, chilled." },
-  { id: "d2", category: "Drinks", name: "Iced Tea", price: 15, emoji: "🧊", desc: "House-blend iced tea." },
-  { id: "d3", category: "Drinks", name: "Bottled Water", price: 12, emoji: "💧", desc: "500ml purified water." },
-
-  { id: "x1", category: "Desserts", name: "Leche Flan Cup", price: 20, emoji: "🍮", desc: "Creamy caramel custard, single serving." },
-  { id: "x2", category: "Desserts", name: "Buko Pandan", price: 20, emoji: "🍧", desc: "Coconut and pandan gelatin dessert." },
-];
-
-const ADMIN_PASSCODE = "canteen2026"; // demo only — replace with real auth for production
+// Pickup slots are generated from these (24-hour clock)
+const OPEN_HOUR = 10;           // first pickup slot  -> 10:00 AM
+const CLOSE_HOUR = 21;          // last pickup slot   ->  9:00 PM
+const SLOT_MINUTES = 30;        // gap between slots
+const PREP_MINUTES = 15;        // earliest a slot can be booked from "now"
 
 /* ---------------------------------------------------------
-   2. STATE
+   2. EDIT YOUR MENU HERE  (prices from the shop's menu board)
+--------------------------------------------------------- */
+
+// Sweetness levels shown on the menu board
+const SUGAR_LEVELS = [0, 25, 50, 75, 100];
+const DEFAULT_SUGAR = 100;
+
+// Add-ons. `only` limits an add-on to certain categories.
+const ADDONS = [
+  { id: "a1", name: "Tapioca Pearls",      price: 10 },
+  { id: "a2", name: "Nata Jelly",          price: 10 },
+  { id: "a3", name: "Extra Shot Espresso", price: 30, only: ["Coffee"] },
+];
+
+// Size / option helpers
+const ML = (m, l) => [
+  { key: "M", label: "Medium (16oz)", short: "M", price: m },
+  { key: "L", label: "Large (22oz)",  short: "L", price: l },
+];
+const COFFEE = (p) => [
+  { key: "ICED", label: "Iced (16oz)", short: "Iced", price: p },
+  { key: "HOT",  label: "Hot (12oz)",  short: "Hot",  price: p },
+];
+const ONE_SIZE = (p, oz = "16oz") => [{ key: "STD", label: oz, short: oz, price: p }];
+
+const CATEGORY_NOTES = {
+  "Coffee": "Iced 16oz or Hot 12oz — same price",
+  "Non Coffee": "16oz",
+};
+
+const MENU = [
+  // ---- FRUITTI (M 16oz / L 22oz) ----
+  { id: "f1", category: "Fruitti", name: "Lychee",      emoji: "🍒", desc: "Sweet, floral lychee fruit tea.",          options: ML(39, 49) },
+  { id: "f2", category: "Fruitti", name: "Strawberry",  emoji: "🍓", desc: "Juicy strawberry fruit tea.",              options: ML(39, 49) },
+  { id: "f3", category: "Fruitti", name: "Mango",       emoji: "🥭", desc: "Tropical ripe mango fruit tea.",           options: ML(39, 49) },
+  { id: "f4", category: "Fruitti", name: "Melon",       emoji: "🍈", desc: "Cool, refreshing melon fruit tea.",        options: ML(39, 49) },
+  { id: "f5", category: "Fruitti", name: "Blueberry",   emoji: "🫐", desc: "Fruity, tangy blueberry fruit tea.",       options: ML(39, 49) },
+  { id: "f6", category: "Fruitti", name: "Green Apple", emoji: "🍏", desc: "Crisp and tangy green apple fruit tea.",   options: ML(39, 49) },
+
+  // ---- MILK TEA (M 16oz / L 22oz) ----
+  { id: "t1", category: "Milk Tea", name: "Wintermelon",       emoji: "🧋", desc: "Classic caramel-sweet wintermelon milk tea.", options: ML(49, 59) },
+  { id: "t2", category: "Milk Tea", name: "Cookies & Cream",   emoji: "🍪", desc: "Creamy milk tea with cookie crumbs.",         options: ML(49, 59) },
+  { id: "t3", category: "Milk Tea", name: "Okinawa",           emoji: "🧋", desc: "Rich brown-sugar Okinawa milk tea.",          options: ML(49, 59) },
+  { id: "t4", category: "Milk Tea", name: "Salted Caramel",    emoji: "🍮", desc: "Sweet-salty caramel milk tea.",               options: ML(49, 59) },
+  { id: "t5", category: "Milk Tea", name: "Taro",              emoji: "🍠", desc: "Smooth, nutty purple taro milk tea.",         options: ML(49, 59) },
+  { id: "t6", category: "Milk Tea", name: "Belgian Chocolate", emoji: "🍫", desc: "Deep chocolatey milk tea.",                   options: ML(49, 59) },
+  { id: "t7", category: "Milk Tea", name: "Matcha",            emoji: "🍵", desc: "Earthy Japanese-style matcha milk tea.",      options: ML(49, 59) },
+
+  // ---- COFFEE (ESPRESSO) — Iced 16oz or Hot 12oz ----
+  { id: "c1", category: "Coffee", name: "Americano",         emoji: "☕", desc: "Espresso with water. Bold and clean.",       options: COFFEE(79) },
+  { id: "c2", category: "Coffee", name: "Cafe Latte",        emoji: "☕", desc: "Espresso with steamed milk.",                options: COFFEE(89) },
+  { id: "c3", category: "Coffee", name: "Dalgona Espresso",  emoji: "☕", desc: "Whipped coffee cream over milk & espresso.", options: COFFEE(99) },
+  { id: "c4", category: "Coffee", name: "Spanish Latte",     emoji: "☕", desc: "Sweetened condensed milk latte.",            options: COFFEE(99) },
+  { id: "c5", category: "Coffee", name: "Vanilla Latte",     emoji: "☕", desc: "Smooth latte with vanilla syrup.",           options: COFFEE(99) },
+  { id: "c6", category: "Coffee", name: "Mocha Latte",       emoji: "☕", desc: "Espresso, milk and chocolate.",              options: COFFEE(99) },
+  { id: "c7", category: "Coffee", name: "White Mocha Latte", emoji: "☕", desc: "Espresso, milk and white chocolate.",        options: COFFEE(99) },
+  { id: "c8", category: "Coffee", name: "Caramel Macchiato", emoji: "☕", desc: "Vanilla milk, espresso and caramel drizzle.",options: COFFEE(99) },
+
+  // ---- FRESH LEMON (M 16oz / L 22oz) ----
+  // ⚠ Classic Lemonade's price was smudged on the menu photo — 59 / 69 is a best guess. Please confirm.
+  { id: "l1", category: "Fresh Lemon", name: "Classic Lemonade", emoji: "🍋", desc: "Freshly squeezed lemonade.",              options: ML(59, 69) },
+  { id: "l2", category: "Fresh Lemon", name: "Lemon Yakult",     emoji: "🍋", desc: "Fresh lemon with creamy Yakult.",          options: ML(69, 79) },
+
+  // ---- NON COFFEE (16oz) ----
+  { id: "n1", category: "Non Coffee", name: "Strawberry Milk", emoji: "🍓", desc: "Strawberry puree with cold milk.",          options: ONE_SIZE(79) },
+  { id: "n2", category: "Non Coffee", name: "Matchaberry",     emoji: "🍵", desc: "Matcha meets strawberry. Sweet & earthy.",  options: ONE_SIZE(79) },
+  { id: "n3", category: "Non Coffee", name: "Milky Matcha",    emoji: "🍵", desc: "Creamy matcha latte.",                      options: ONE_SIZE(79) },
+
+  // ---- FRAPPE (M 16oz / L 22oz) ----
+  // ⚠ Only "Cookies & Cream" was visible on the photo (the board is cut off). Add other frappes here.
+  { id: "p1", category: "Frappe", name: "Cookies & Cream", emoji: "🥤", desc: "Blended cookies & cream frappe.", options: ML(99, 119) },
+];
+
+/* ---------------------------------------------------------
+   3. STATE
 --------------------------------------------------------- */
 const state = {
-  cart: {},              // { menuId: qty }
+  cart: {},               // { lineKey: { itemId, optKey, sugar, addons:[ids], qty } }
   orders: [],             // orders currently loaded from Supabase
-  myTicketIds: [],         // tickets placed this session, shown automatically in tracker
-  nextTicketNumber: 1,      // shown on the hero banner; refreshed from the DB
+  myTicketIds: [],        // tickets placed this session, shown automatically in tracker
+  nextTicketNumber: 1,    // shown on the hero banner; refreshed from the DB
   activeCategory: "All",
   adminAuthed: false,
   adminStatusFilter: "All",
+  custom: null,           // drink currently being customized
 };
 
 const money = (n) => "₱" + Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const formatTicket = (n) => "K-" + String(n).padStart(4, "0");
+const formatTicket = (n) => "SC-" + String(n).padStart(4, "0");
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 /* ---------------------------------------------------------
-   3. ELEMENT REFS
+   4. ELEMENT REFS
 --------------------------------------------------------- */
 const el = (id) => document.getElementById(id);
 
@@ -70,8 +135,17 @@ const checkoutBtn = el("checkoutBtn");
 const views = { student: el("view-student"), tracker: el("view-tracker"), admin: el("view-admin") };
 const navBtns = { student: el("navStudent"), tracker: el("navTracker"), admin: el("navAdmin") };
 
+let toastTimer;
+function toast(msg) {
+  const t = el("toast");
+  t.textContent = msg;
+  t.classList.add("is-show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("is-show"), 2600);
+}
+
 /* ---------------------------------------------------------
-   4. SUPABASE DATA LAYER
+   5. SUPABASE DATA LAYER
 --------------------------------------------------------- */
 
 // Convert a raw Supabase row into the shape the UI uses
@@ -80,8 +154,8 @@ function mapRow(row) {
     id: row.id,
     ticketNumber: row.ticket_number,
     ticket: formatTicket(row.ticket_number),
-    studentName: row.student_name,
-    studentSection: row.student_section,
+    studentName: row.student_name,       // customer name
+    studentSection: row.student_section, // customer mobile number
     pickupTime: row.pickup_time,
     payment: row.payment_method,
     gcashRef: row.gcash_ref,
@@ -157,12 +231,13 @@ async function updateOrderPaid(id, paid) {
   return true;
 }
 
-// Search orders by ticket number or student name (used in the student tracker)
+// Search orders by ticket number or customer name (used in the tracker)
 async function searchOrders(query) {
   const digits = query.replace(/[^0-9]/g, "");
+  const safe = query.replace(/[,()%]/g, " "); // keep the PostgREST filter string well-formed
   const orFilter = digits
-    ? `ticket_number.eq.${Number(digits)},student_name.ilike.%${query}%`
-    : `student_name.ilike.%${query}%`;
+    ? `ticket_number.eq.${Number(digits)},student_name.ilike.%${safe}%`
+    : `student_name.ilike.%${safe}%`;
 
   const { data, error } = await supabaseClient
     .from("orders")
@@ -189,7 +264,7 @@ supabaseClient
   .subscribe();
 
 /* ---------------------------------------------------------
-   5. VIEW SWITCHING
+   6. VIEW SWITCHING
 --------------------------------------------------------- */
 function showView(name) {
   Object.keys(views).forEach((k) => {
@@ -204,8 +279,10 @@ navBtns.tracker.addEventListener("click", () => showView("tracker"));
 navBtns.admin.addEventListener("click", () => showView("admin"));
 
 /* ---------------------------------------------------------
-   6. MENU RENDERING
+   7. MENU RENDERING
 --------------------------------------------------------- */
+const findItem = (id) => MENU.find((m) => m.id === id);
+
 function categories() {
   return ["All", ...new Set(MENU.map((m) => m.category))];
 }
@@ -237,73 +314,120 @@ function renderMenu() {
   Object.entries(grouped).forEach(([cat, items]) => {
     const heading = document.createElement("div");
     heading.className = "menuCategory";
-    heading.innerHTML = `<h3>${cat}</h3>`;
+    const note = CATEGORY_NOTES[cat] || (items[0].options.length > 1 ? "Medium 16oz · Large 22oz" : "");
+    heading.innerHTML = `<h3>${esc(cat)}</h3>${note ? `<small>${esc(note)}</small>` : ""}`;
     menuGrid.appendChild(heading);
-    items.forEach((item) => menuGrid.appendChild(buildFoodCard(item)));
+    items.forEach((item) => menuGrid.appendChild(buildDrinkCard(item)));
   });
 }
 
-function buildFoodCard(item) {
-  const qty = state.cart[item.id] || 0;
+function buildDrinkCard(item) {
+  const inCart = itemQty(item.id);
+  const full = inCart >= MAX_QTY_PER_ITEM;
   const card = document.createElement("article");
-  card.className = "foodCard";
+  card.className = "foodCard" + (inCart ? " is-inCart" : "");
+
+  const prices = item.options.length > 1
+    ? item.options.map((o) => `<span class="priceTag"><small>${esc(o.short)}</small>${money(o.price).replace(".00", "")}</span>`).join("")
+    : `<span class="priceTag">${money(item.options[0].price).replace(".00", "")}</span>`;
+
   card.innerHTML = `
+    ${inCart ? `<span class="inCartBadge">${inCart} in tray</span>` : ""}
     <div class="foodCard__top">
       <div class="foodCard__emoji">${item.emoji}</div>
       <div>
-        <div class="foodCard__name">${item.name}</div>
-        <div class="foodCard__desc">${item.desc}</div>
+        <div class="foodCard__name">${esc(item.name)}</div>
+        <div class="foodCard__desc">${esc(item.desc)}</div>
       </div>
     </div>
     <div class="foodCard__bottom">
-      <span class="foodCard__price">${money(item.price)}</span>
-      <div class="qtyZone" data-id="${item.id}"></div>
+      <div class="foodCard__prices">${prices}</div>
+      <button class="addBtn" ${full ? "disabled" : ""}>${full ? "Max " + MAX_QTY_PER_ITEM : "Add +"}</button>
     </div>
   `;
-  renderQtyZone(card.querySelector(".qtyZone"), item.id, qty);
+  card.querySelector(".addBtn").addEventListener("click", () => openCustomize(item.id));
   return card;
 }
 
-function renderQtyZone(zone, id, qty) {
-  zone.innerHTML = "";
-  if (qty === 0) {
-    const btn = document.createElement("button");
-    btn.className = "addBtn";
-    btn.textContent = "Add +";
-    btn.addEventListener("click", () => changeQty(id, 1));
-    zone.appendChild(btn);
-  } else {
-    zone.innerHTML = `
-      <div class="stepper">
-        <button data-act="minus">−</button>
-        <span>${qty}</span>
-        <button data-act="plus">+</button>
-      </div>`;
-    zone.querySelector('[data-act="minus"]').addEventListener("click", () => changeQty(id, -1));
-    zone.querySelector('[data-act="plus"]').addEventListener("click", () => changeQty(id, 1));
-  }
-}
-
-function changeQty(id, delta) {
-  const current = state.cart[id] || 0;
-  const next = Math.max(0, current + delta);
-  if (next === 0) delete state.cart[id];
-  else state.cart[id] = next;
-  renderMenu();
-  renderCart();
-}
-
 /* ---------------------------------------------------------
-   7. CART
+   8. CART  (each unique drink + size + sweetness + add-ons is one line)
+   Notes: the order is saved to the existing `orders` table. Each
+   cart line is stored in `items` as { name, qty, price } where `name`
+   carries the size / sweetness / add-ons, e.g.
+   "Wintermelon (L, 50% sugar, +Tapioca Pearls)" and `price` is the
+   per-cup price including add-ons. The mobile number is stored in the
+   existing `student_section` column.
 --------------------------------------------------------- */
+const lineKeyOf = (l) => [l.itemId, l.optKey, l.sugar, [...l.addons].sort().join("+")].join("|");
+
+// Total cups of one menu item currently in the cart (all sizes / variants)
+function itemQty(itemId) {
+  return Object.values(state.cart).filter((l) => l.itemId === itemId).reduce((s, l) => s + l.qty, 0);
+}
+
+function addonsFor(item) {
+  return ADDONS.filter((a) => !a.only || a.only.includes(item.category));
+}
+
+// Expand a stored cart line into everything the UI needs
+function describeLine(key, l) {
+  const item = findItem(l.itemId);
+  const opt = item.options.find((o) => o.key === l.optKey);
+  const addons = l.addons.map((id) => ADDONS.find((a) => a.id === id));
+  const unit = opt.price + addons.reduce((s, a) => s + a.price, 0);
+
+  const parts = [];
+  if (item.options.length > 1) parts.push(opt.short);
+  parts.push(l.sugar + "% sugar");
+  addons.forEach((a) => parts.push("+" + a.name));
+
+  return {
+    key,
+    itemId: l.itemId,
+    qty: l.qty,
+    emoji: item.emoji,
+    baseName: item.name,
+    optsText: parts.join(", "),
+    name: `${item.name} (${parts.join(", ")})`,
+    price: unit,
+    lineTotal: unit * l.qty,
+  };
+}
+
 function cartLines() {
-  return Object.entries(state.cart).map(([id, qty]) => {
-    const item = MENU.find((m) => m.id === id);
-    return { ...item, qty, lineTotal: item.price * qty };
-  });
+  return Object.entries(state.cart).map(([key, l]) => describeLine(key, l));
 }
 function cartTotal() {
   return cartLines().reduce((sum, l) => sum + l.lineTotal, 0);
+}
+
+// Add cups to the cart; returns how many were actually added (respects the per-item limit)
+function addToCart(line, qty) {
+  const room = MAX_QTY_PER_ITEM - itemQty(line.itemId);
+  const add = Math.min(qty, Math.max(0, room));
+  if (add <= 0) {
+    toast(`Limit reached — max ${MAX_QTY_PER_ITEM} per item per order.`);
+    return 0;
+  }
+  const key = lineKeyOf(line);
+  if (state.cart[key]) state.cart[key].qty += add;
+  else state.cart[key] = { ...line, addons: [...line.addons], qty: add };
+  if (add < qty) toast(`Only ${add} added — max ${MAX_QTY_PER_ITEM} per item per order.`);
+  return add;
+}
+
+function setLineQty(key, wanted) {
+  const l = state.cart[key];
+  if (!l) return;
+  const others = itemQty(l.itemId) - l.qty;
+  const max = MAX_QTY_PER_ITEM - others;
+  let next = Math.floor(Number(wanted));
+  if (!Number.isFinite(next)) next = l.qty;
+  if (next > max) { next = max; toast(`Limit reached — max ${MAX_QTY_PER_ITEM} per item per order.`); }
+  if (next <= 0) delete state.cart[key];
+  else l.qty = next;
+  renderMenu();
+  renderCart();
 }
 
 function renderCart() {
@@ -315,21 +439,29 @@ function renderCart() {
   checkoutBtn.disabled = lines.length === 0;
 
   lines.forEach((l) => {
+    const room = MAX_QTY_PER_ITEM - itemQty(l.itemId);
     const row = document.createElement("div");
     row.className = "cartItem";
     row.innerHTML = `
       <div class="cartItem__emoji">${l.emoji}</div>
       <div class="cartItem__info">
-        <div class="cartItem__name">${l.name} × ${l.qty}</div>
-        <div class="cartItem__price">${money(l.lineTotal)}</div>
+        <div class="cartItem__name">${esc(l.baseName)}</div>
+        <div class="cartItem__opts">${esc(l.optsText)}</div>
+        <div class="cartItem__price">${money(l.price)} ea · ${money(l.lineTotal)}</div>
       </div>
-      <button class="cartItem__remove">Remove</button>
+      <div class="cartItem__side">
+        <div class="stepper">
+          <button data-act="minus" aria-label="Less">−</button>
+          <input type="number" inputmode="numeric" min="1" max="${MAX_QTY_PER_ITEM}" value="${l.qty}" aria-label="Quantity">
+          <button data-act="plus" aria-label="More" ${room <= 0 ? "disabled" : ""}>+</button>
+        </div>
+        <button class="cartItem__remove">Remove</button>
+      </div>
     `;
-    row.querySelector(".cartItem__remove").addEventListener("click", () => {
-      delete state.cart[l.id];
-      renderMenu();
-      renderCart();
-    });
+    row.querySelector('[data-act="minus"]').addEventListener("click", () => setLineQty(l.key, l.qty - 1));
+    row.querySelector('[data-act="plus"]').addEventListener("click", () => setLineQty(l.key, l.qty + 1));
+    row.querySelector("input").addEventListener("change", (e) => setLineQty(l.key, e.target.value));
+    row.querySelector(".cartItem__remove").addEventListener("click", () => setLineQty(l.key, 0));
     cartItemsEl.appendChild(row);
   });
 
@@ -345,15 +477,174 @@ el("closeCart").addEventListener("click", closeCart);
 overlay.addEventListener("click", () => { closeCart(); closeAllModals(); });
 
 /* ---------------------------------------------------------
-   8. CHECKOUT MODAL
+   9. CUSTOMIZE-A-DRINK SHEET (size, sweetness, add-ons, quantity)
+--------------------------------------------------------- */
+const customOverlay = el("customOverlay");
+const customBody = el("customBody");
+
+function openCustomize(itemId) {
+  const item = findItem(itemId);
+  if (itemQty(itemId) >= MAX_QTY_PER_ITEM) {
+    toast(`Limit reached — max ${MAX_QTY_PER_ITEM} per item per order.`);
+    return;
+  }
+  state.custom = { itemId, optKey: item.options[0].key, sugar: DEFAULT_SUGAR, addons: [], qty: 1 };
+  renderCustomize();
+  customOverlay.classList.add("is-open");
+}
+function closeCustomize() { customOverlay.classList.remove("is-open"); state.custom = null; }
+el("closeCustom").addEventListener("click", closeCustomize);
+
+function customUnitPrice() {
+  const c = state.custom, item = findItem(c.itemId);
+  const base = item.options.find((o) => o.key === c.optKey).price;
+  return base + c.addons.reduce((s, id) => s + ADDONS.find((a) => a.id === id).price, 0);
+}
+const customRoom = () => MAX_QTY_PER_ITEM - itemQty(state.custom.itemId);
+
+function updateCustomTotals() {
+  const c = state.custom;
+  el("customTotal").textContent = money(customUnitPrice() * c.qty);
+}
+
+function renderCustomize() {
+  const c = state.custom, item = findItem(c.itemId), room = customRoom();
+  c.qty = Math.min(Math.max(1, c.qty), room);
+
+  const sizeGroup = item.options.length > 1 ? `
+    <div class="custom__group">
+      <h4>Size</h4>
+      <div class="chipRow">
+        ${item.options.map((o) => `
+          <button type="button" class="optChip ${o.key === c.optKey ? "is-on" : ""}" data-opt="${o.key}">
+            ${esc(o.label)}<small>${money(o.price).replace(".00", "")}</small>
+          </button>`).join("")}
+      </div>
+    </div>` : "";
+
+  const addons = addonsFor(item);
+  const addonGroup = addons.length ? `
+    <div class="custom__group">
+      <h4>Add-ons <small>optional</small></h4>
+      <div class="chipRow">
+        ${addons.map((a) => `
+          <button type="button" class="optChip optChip--addon ${c.addons.includes(a.id) ? "is-on" : ""}" data-addon="${a.id}">
+            ${esc(a.name)}<small>+${money(a.price).replace(".00", "")}</small>
+          </button>`).join("")}
+      </div>
+    </div>` : "";
+
+  customBody.innerHTML = `
+    <div class="custom__top">
+      <div class="foodCard__emoji">${item.emoji}</div>
+      <div>
+        <div class="custom__title">${esc(item.name)}</div>
+        <div class="custom__desc">${esc(item.desc)}</div>
+      </div>
+    </div>
+    ${sizeGroup}
+    <div class="custom__group">
+      <h4>Sweetness level</h4>
+      <div class="chipRow">
+        ${SUGAR_LEVELS.map((s) => `<button type="button" class="optChip optChip--sugar ${s === c.sugar ? "is-on" : ""}" data-sugar="${s}">${s}%</button>`).join("")}
+      </div>
+    </div>
+    ${addonGroup}
+    <div class="custom__group custom__qty">
+      <div>
+        <h4 style="margin:0">Quantity</h4>
+        <div class="hint">${room < MAX_QTY_PER_ITEM ? `${room} more allowed` : `Max ${MAX_QTY_PER_ITEM}`} per item</div>
+      </div>
+      <div class="stepper">
+        <button type="button" data-q="-1" aria-label="Less">−</button>
+        <input type="number" id="customQty" inputmode="numeric" min="1" max="${room}" value="${c.qty}" aria-label="Quantity">
+        <button type="button" data-q="1" aria-label="More">+</button>
+      </div>
+    </div>
+    <button type="button" class="btn btn--primary btn--block" id="customAddBtn">
+      Add to Order · <span id="customTotal">${money(customUnitPrice() * c.qty)}</span>
+    </button>
+  `;
+
+  customBody.querySelectorAll("[data-opt]").forEach((b) => b.addEventListener("click", () => { c.optKey = b.dataset.opt; renderCustomize(); }));
+  customBody.querySelectorAll("[data-sugar]").forEach((b) => b.addEventListener("click", () => { c.sugar = Number(b.dataset.sugar); renderCustomize(); }));
+  customBody.querySelectorAll("[data-addon]").forEach((b) => b.addEventListener("click", () => {
+    const id = b.dataset.addon;
+    c.addons = c.addons.includes(id) ? c.addons.filter((x) => x !== id) : [...c.addons, id];
+    renderCustomize();
+  }));
+
+  const qtyInput = el("customQty");
+  const clampQty = (v) => {
+    let n = Math.floor(Number(v));
+    if (!Number.isFinite(n) || n < 1) n = 1;
+    if (n > room) { n = room; toast(`Limit reached — max ${MAX_QTY_PER_ITEM} per item per order.`); }
+    return n;
+  };
+  customBody.querySelectorAll("[data-q]").forEach((b) => b.addEventListener("click", () => {
+    c.qty = clampQty(c.qty + Number(b.dataset.q));
+    qtyInput.value = c.qty;
+    updateCustomTotals();
+  }));
+  qtyInput.addEventListener("input", () => {
+    const n = Math.floor(Number(qtyInput.value));
+    if (Number.isFinite(n) && n >= 1) { c.qty = Math.min(n, room); updateCustomTotals(); }
+  });
+  qtyInput.addEventListener("change", () => { c.qty = clampQty(qtyInput.value); qtyInput.value = c.qty; updateCustomTotals(); });
+
+  el("customAddBtn").addEventListener("click", () => {
+    c.qty = clampQty(qtyInput.value);
+    const added = addToCart({ itemId: c.itemId, optKey: c.optKey, sugar: c.sugar, addons: c.addons, qty: c.qty }, c.qty);
+    if (!added) return;
+    closeCustomize();
+    renderMenu();
+    renderCart();
+    if (added === c.qty) toast(`${added} × ${item.name} added to your tray 🧋`);
+  });
+}
+
+/* ---------------------------------------------------------
+   10. CHECKOUT MODAL
 --------------------------------------------------------- */
 const checkoutOverlay = el("checkoutOverlay");
 const checkoutForm = el("checkoutForm");
 const gcashBox = el("gcashBox");
 
+// Build pickup choices: "As soon as possible" + time slots from now until closing
+function buildPickupOptions() {
+  const sel = el("pickupTime");
+  const keep = sel.value;
+  sel.innerHTML = `<option value="">Select a pickup time…</option>`;
+
+  const fmt = (d) => d.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" });
+  const now = new Date();
+  const earliest = new Date(now.getTime() + PREP_MINUTES * 60000);
+
+  const slotsFor = (base) => {
+    const out = [];
+    let d = new Date(base); d.setHours(OPEN_HOUR, 0, 0, 0);
+    const end = new Date(base); end.setHours(CLOSE_HOUR, 0, 0, 0);
+    for (; d <= end; d = new Date(d.getTime() + SLOT_MINUTES * 60000)) out.push(new Date(d));
+    return out;
+  };
+
+  let today = slotsFor(now).filter((d) => d >= earliest);
+  let prefix = "";
+  if (today.length) {
+    sel.insertAdjacentHTML("beforeend", `<option>As soon as possible (about ${PREP_MINUTES}–20 mins)</option>`);
+  } else {
+    const tmr = new Date(now.getTime() + 86400000);
+    today = slotsFor(tmr);
+    prefix = "Tomorrow — ";
+  }
+  today.forEach((d) => sel.insertAdjacentHTML("beforeend", `<option>${prefix}${fmt(d)}</option>`));
+  if ([...sel.options].some((o) => o.value === keep)) sel.value = keep;
+}
+
 function openCheckout() {
   if (cartLines().length === 0) return;
   closeCart();
+  buildPickupOptions();
   renderCheckoutSummary();
   checkoutOverlay.classList.add("is-open");
 }
@@ -367,7 +658,7 @@ document.querySelectorAll('input[name="payment"]').forEach((r) => {
 
 function renderCheckoutSummary() {
   const lines = cartLines();
-  const rows = lines.map((l) => `<div class="row"><span>${l.name} × ${l.qty}</span><b>${money(l.lineTotal)}</b></div>`).join("");
+  const rows = lines.map((l) => `<div class="row"><span>${esc(l.name)} × ${l.qty}</span><b>${money(l.lineTotal)}</b></div>`).join("");
   el("modalSummary").innerHTML = `${rows}<div class="totalRow"><span>Total</span><strong>${money(cartTotal())}</strong></div>`;
 }
 
@@ -378,18 +669,22 @@ checkoutForm.addEventListener("submit", async (e) => {
 
   if (payment === "gcash" && !gcashRef) {
     el("gcashRef").focus();
-    el("gcashRef").style.borderColor = "var(--red)";
+    el("gcashRef").style.borderColor = "var(--pink)";
     return;
   }
 
-  const studentName = el("studentName").value.trim();
-  const studentSection = el("studentSection").value.trim();
+  // Safety net: never let an item go past the per-order limit
+  const overLimit = MENU.find((m) => itemQty(m.id) > MAX_QTY_PER_ITEM);
+  if (overLimit) { toast(`${overLimit.name}: max ${MAX_QTY_PER_ITEM} per order.`); return; }
+
+  const customerName = el("studentName").value.trim();
+  const customerPhone = el("studentSection").value.trim();
   const pickupTime = el("pickupTime").value;
   const lines = cartLines();
 
   const payload = {
-    student_name: studentName,
-    student_section: studentSection,
+    student_name: customerName,
+    student_section: customerPhone,
     pickup_time: pickupTime,
     payment_method: payment,
     gcash_ref: payment === "gcash" ? gcashRef : null,
@@ -418,21 +713,22 @@ checkoutForm.addEventListener("submit", async (e) => {
   await refreshHeroTicket();
   closeCheckout();
   checkoutForm.reset();
+  el("gcashRef").style.borderColor = "";
   gcashBox.hidden = true;
   showConfirmation(savedOrder);
 });
 
 /* ---------------------------------------------------------
-   9. CONFIRMATION TICKET
+   11. CONFIRMATION TICKET
 --------------------------------------------------------- */
 const confirmOverlay = el("confirmOverlay");
 function showConfirmation(order) {
   el("confirmNumber").textContent = order.ticket;
-  const itemsList = order.items.map((i) => `${i.qty}× ${i.name}`).join(", ");
+  const itemsList = order.items.map((i) => `${i.qty}× ${esc(i.name)}`).join("<br>");
   el("confirmDetails").innerHTML = `
-    <div class="row"><span>Name</span><b>${order.studentName}</b></div>
-    <div class="row"><span>Section</span><b>${order.studentSection}</b></div>
-    <div class="row"><span>Pickup</span><b>${order.pickupTime}</b></div>
+    <div class="row"><span>Name</span><b>${esc(order.studentName)}</b></div>
+    <div class="row"><span>Mobile</span><b>${esc(order.studentSection)}</b></div>
+    <div class="row"><span>Pickup</span><b>${esc(order.pickupTime)}</b></div>
     <div class="row"><span>Items</span><b>${itemsList}</b></div>
     <div class="row"><span>Payment</span><b>${order.payment === "gcash" ? "GCash (pending verification)" : "Cash on pickup"}</b></div>
     <div class="row"><span>Total</span><b>${money(order.total)}</b></div>
@@ -447,13 +743,14 @@ el("confirmDoneBtn").addEventListener("click", () => {
 function closeAllModals() {
   checkoutOverlay.classList.remove("is-open");
   confirmOverlay.classList.remove("is-open");
+  closeCustomize();
 }
-[checkoutOverlay, confirmOverlay].forEach((ov) => {
+[checkoutOverlay, confirmOverlay, customOverlay].forEach((ov) => {
   ov.addEventListener("click", (e) => { if (e.target === ov) closeAllModals(); });
 });
 
 /* ---------------------------------------------------------
-   10. TRACKER VIEW (student side)
+   12. TRACKER VIEW (customer side)
 --------------------------------------------------------- */
 async function renderTracker() {
   const list = el("trackerList");
@@ -498,18 +795,18 @@ function statusBadgeClass(status) {
 function buildOrderCard(o, isAdmin) {
   const card = document.createElement("div");
   card.className = "orderCard";
-  const itemsText = o.items.map((i) => `${i.qty}× ${i.name}`).join(", ");
+  const itemsText = o.items.map((i) => `${i.qty}× ${esc(i.name)}`).join("<br>");
   const payBadge = o.payment === "gcash"
-    ? `<span class="badge ${o.paid ? "badge--paid" : "badge--unpaid"}">${o.paid ? "GCash Verified" : "GCash Ref " + o.gcashRef}</span>`
+    ? `<span class="badge ${o.paid ? "badge--paid" : "badge--unpaid"}">${o.paid ? "GCash Verified" : "GCash Ref " + esc(o.gcashRef)}</span>`
     : `<span class="badge badge--unpaid">Cash on Pickup</span>`;
 
   card.innerHTML = `
     <div class="orderCard__head">
       <div>
         <div class="orderCard__num">${o.ticket}</div>
-        <div class="orderCard__meta">${o.studentName} · ${o.studentSection} · ${o.pickupTime}</div>
+        <div class="orderCard__meta">${esc(o.studentName)} · ${esc(o.studentSection)} · ${esc(o.pickupTime)}</div>
       </div>
-      <span class="badge ${statusBadgeClass(o.status)}">${o.status}</span>
+      <span class="badge ${statusBadgeClass(o.status)}">${esc(o.status)}</span>
     </div>
     <div class="orderCard__items">${itemsText}</div>
     <div class="orderCard__foot">
@@ -553,7 +850,7 @@ function buildOrderCard(o, isAdmin) {
 }
 
 /* ---------------------------------------------------------
-   11. ADMIN VIEW
+   13. ADMIN VIEW
 --------------------------------------------------------- */
 el("adminLoginBtn").addEventListener("click", tryAdminLogin);
 el("adminPass").addEventListener("keydown", (e) => { if (e.key === "Enter") tryAdminLogin(); });
@@ -621,7 +918,7 @@ function renderAdminOrderList() {
 
   const filtered = state.orders.filter((o) => {
     const statusOk = state.adminStatusFilter === "All" || o.status === state.adminStatusFilter;
-    const searchOk = !q || o.ticket.toLowerCase().includes(q) || o.studentName.toLowerCase().includes(q);
+    const searchOk = !q || o.ticket.toLowerCase().includes(q) || (o.studentName || "").toLowerCase().includes(q);
     return statusOk && searchOk;
   });
 
@@ -633,7 +930,7 @@ function renderAdminOrderList() {
 }
 
 /* ---------------------------------------------------------
-   12. INIT
+   14. INIT
 --------------------------------------------------------- */
 renderCatbar();
 renderMenu();
